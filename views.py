@@ -15,6 +15,7 @@ from accounting.models import create_ledger
 from core.firebase_utils import message_type
 from core.firebase_utils.firestore import write_notification
 from payments.models import OJInvoice
+
 # Create your views here.
 from payments.serializers import InvoiceSerializer
 from tp_bookings.serializers import TravelPackageBookingSerializer
@@ -39,11 +40,22 @@ def notify_customer(customer, message, title, body, sound, icon):
 
 # todo : for accounting
 def create_payables(instance):
-    pass
+    # Mengambil data instansiasi 
+    payee = instance.customer
+    amount = instance.total_amount
+    due_date = instance.due_date
 
+    # menyimpan data
+    payable = Payable(payee=payee, amount=amount, due_date=due_date)
+    payable.save()
 
-def create_recieveable(instance):
-    pass
+def create_receivables(instance):
+    payer = instance.customer
+    amount = instance.total_amount
+    due_date = instance.due_date
+
+    receivable = Receivable(payer=payer, amount=amount, due_date=due_date)
+    receivable.save()
 
 
 # class InvoiceViewsets(ModelViewSet):

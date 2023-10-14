@@ -7,8 +7,7 @@ import pytz
 import requests
 
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding, ec, utils
 from django.conf import settings
 from rest_framework import status
@@ -16,6 +15,7 @@ from rest_framework.exceptions import APIException
 from cryptography.exceptions import InvalidSignature
 
 from payments.models import OJInvoice
+
 
 
 def remove_nulls(obj):
@@ -93,50 +93,46 @@ def send_paylabs_request(method, merchant_id, request_id, endpoint_url, request_
 
 
 # todo: copy dan refaktor fungsi untuk validasi signature dari google collab, setiap request dari paylab harus di verify terlebih dahulu
-def verify_google_colab_signature(data, signature, public_key_pem):
-    # Load the public key from a PEM-encoded string
-    public_key = serialization.load_pem_public_key(public_key_pem.encode('utf-8'))
 
+# Fungsi untuk membuat tanda tangan digital
+def sign_and_base64_encode(data, private_key_str):
+    private_key = serialization.load_pem_private_key(private_key_str.encode('utf-8'), password=None, backend=default_backend())
+    data_bytes = data.encode('utf-8')
+    
+    signature = private_key.sign(data_bytes, padding.PKCS1v15(), hashes.SHA256())
+    base64_signature = base64.b64encode(signature).decode('utf-8')
+    
+    return base64_signature
+
+# Fungsi untuk melakukan verifikasi tanda tangan digital
+def verify_signature(data, signature, public_key_str):
+    public_key = serialization.load_pem_public_key(public_key_str.encode('utf-8'), backend=default_backend())
+    data_bytes = data.encode('utf-8')
+    signature_bytes = base64.b64decode(signature.encode('utf-8'))
+    
     try:
-        # Decode the base64 signature
-        signature_bytes = base64.b64decode(signature)
+        public_key.verify(signature_bytes, data_bytes, padding.PKCS1v15(), hashes.SHA256())
+        return True  # Tanda tangan valid
+    except Exception as e:
+        return False  # Tanda tangan tidak valid
 
-        # Verify the signature
-        public_key.verify(
-            signature_bytes,
-            data.encode('utf-8'),
-            ec.ECDSA(hashes.SHA256())
-        )
+# Contoh penggunaan
+private_key_str = """..."""  # Isi dengan kunci pribadi
+public_key_str = """..."""   # Isi dengan kunci publik
 
-        return True  # Signature is valid
-    except InvalidSignature:
-        return False  # Signature is invalid
+# Buat data contoh
+data_to_sign = "POST:/payment/v2/va/create:d4730fc9cf4907e36db6dd9baf3e75d3560bf790409f9999e83407f2da474ce0:2023-09-22T15:07:32.745185"
 
-# Data yang akan diverifikasi
-data_to_verify = "Data yang akan diverifikasi"
+# Create tanda tangan digital
+signature = sign_and_base64_encode(data_to_sign, private_key_str)
 
-# Signature yang akan diverifikasi
-signature_to_verify = "Signature dari Google Colab dalam bentuk base64"
-
-# Kunci publik Google Colab dalam format PEM
-google_colab_public_key_pem = """
------BEGIN PUBLIC KEY-----
-MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQBouCUp4Iexm1vIw2R0FlFYDc+3SVR
-KpMPO1I/N5Kkx9lvf/NQI7vXmSGW6N3pTGLm59XFk7fOgZ0HbUvqWY2jC6F8Xuf0
-TVYOaX7XYlZMBkHslBp6c6RGuu/XVOmL8COClpdwBhBjygyPnPhGO2MWgDABH6lS
-GcnCHp1E5RdFTrmJDE/e+DdqrhtgD6lmHvnDL3IKisEbK7ED96vPS9kIefrN9ZgF
-ttILz4/37Mv4y43nT/4A94rH9eJ9SP1BYRZs58L6THgGFDtrMX2fuMF73/MQGebS
-Qs6YRwOiNZ1RQAMil0P3l1WGzo6hYqJ4qDLtzBb6ImtqH0QqV17JnlU=
------END PUBLIC KEY-----
-"""
-
-# Memverifikasi tanda tangan
-is_valid = verify_google_colab_signature(data_to_verify, signature_to_verify, google_colab_public_key_pem)
+# Verifikasi tanda tangan digital
+is_valid = verify_signature(data_to_sign, signature, public_key_str)
 
 if is_valid:
-    print("Tanda tangan valid")
+    print("Tanda tangan valid.")
 else:
-    print("Tanda tangan tidak valid")
+    print("Tanda tangan tidak valid.")
 
 
 
@@ -180,3 +176,85 @@ def create_paylabs_emoney_request_body(invoice: OJInvoice):
 
 # todo: buat untuk create body untuk virtual account, credit card, OTC, yang status inquiry semua, Order reconciliation file download link interface, sumber: https://paylabs.co.id/api-reference.html
 
+# Fungsi untuk membuat tanda tangan digital
+def sign_and_base64_encode(data, private_key_str):
+    private_key = serialization.load_pem_private_key(private_key_str.encode('utf-8'), password=None, backend=default_backend())
+    data_bytes = data.encode('utf-8')
+    
+    signature = private_key.sign(data_bytes, padding.PKCS1v15(), hashes.SHA256())
+    base64_signature = signature
+
+    return base64_signature
+
+# Fungsi untuk membuat permintaan unduh file rekonsiliasi
+def download_reconciliation_file(merchant_id, request_id, transaction_type, pay_date, private_key_str):
+    root_url = "https://paylabs.co.id"  # Ganti dengan URL basis Paylabs yang sesuai
+    endpoint_url = "/xxx/xxx"  # Ganti dengan endpoint yang sesuai
+    
+    # Format timestamp
+    your_timezone = pytz.timezone('Asia/Bangkok')
+    timestamp = datetime.datetime.now(your_timezone)
+    formatted_timestamp = timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f%z")
+    formatted_timestamp = formatted_timestamp[:-2] + ":" + formatted_timestamp[-2:]
+
+    # Buat data JSON untuk permintaan
+    request_data = {
+        "requestId": request_id,
+        "merchantId": merchant_id,
+        "transactionType": transaction_type,
+        "payDate": pay_date
+    }
+    
+    # Konversi data JSON ke string
+    request_json = json.dumps(request_data, separators=(',', ':'), ensure_ascii=False)
+
+    # Hitung hash dari data JSON
+    digest = sha256.sha256(request_json.encode('utf-8')).hexdigest()
+
+    # Buat string konten untuk tanda tangan digital
+    content_string = f"POST:{endpoint_url}:{digest}:{formatted_timestamp}"
+
+    # Buat tanda tangan digital
+    signature = sign_and_base64_encode(content_string, private_key_str)
+
+    # Header untuk permintaan
+    headers = {
+        "Content-Type": "application/json;charset=utf-8",
+        "X-TIMESTAMP": formatted_timestamp,
+        "X-SIGNATURE": signature,
+        "X-PARTNER-ID": merchant_id,
+        "X-REQUEST-ID": request_id
+    }
+
+    # Kirim permintaan
+    response = requests.post(f"{root_url}{endpoint_url}", json=request_data, headers=headers)
+
+    # Tangani tanggapan
+    if response.status_code == 200:
+        response_data = response.json()
+        if response_data["status"] == "2":
+            # File siap untuk diunduh
+            file_url = response_data.get("fileUrl")
+            if file_url:
+                # Lakukan pengunduhan file
+                download_file(file_url)
+            else:
+                print("Tidak ada URL unduhan file dalam tanggapan.")
+        else:
+            print("Permintaan sedang diproses. Cek lagi nanti.")
+    else:
+        print("Gagal melakukan permintaan:", response.status_code)
+
+# Fungsi untuk mengunduh file
+def download_file(file_url):
+    # Implementasikan logika pengunduhan file di sini
+    pass
+
+# Contoh penggunaan
+merchant_id = "0010001"
+request_id = "PY9f05af9d-4275-49e2-b972-a2427232c268"
+transaction_type = "10"
+pay_date = "2022-08-01"
+private_key_str = """..."""  # Isi dengan kunci pribadi Anda
+
+download_reconciliation_file(merchant_id, request_id, transaction_type, pay_date, private_key_str)

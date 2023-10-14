@@ -1,5 +1,5 @@
 todo list:
-paylabs_utils.py = 3 done 2
-serializers.py = 1
-views_v2.py = 1
+paylabs_utils.py = 3 done 
+serializers.py = 1 done
+views_v2.py = 1 done
 views.py = 1
