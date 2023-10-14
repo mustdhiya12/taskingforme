@@ -9,15 +9,8 @@ import requests
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding, ec, utils
-from django.conf import settings
-from rest_framework import status
-from rest_framework.exceptions import APIException
-from cryptography.exceptions import InvalidSignature
 
-from payments.models import OJInvoice
-
-
-
+# Fungsi-fungsi utilitas
 def remove_nulls(obj):
     if isinstance(obj, dict):
         return {key: remove_nulls(value) for key, value in obj.items() if value is not None}
@@ -25,7 +18,6 @@ def remove_nulls(obj):
         return [remove_nulls(item) for item in obj if item is not None]
     else:
         return obj
-
 
 def minify_json(json_string):
     try:
@@ -37,7 +29,6 @@ def minify_json(json_string):
     except ValueError as e:
         # Handle invalid JSON input
         return None
-
 
 def sign_and_base64_encode(string_content, private_key_str):
     # Load the private key from a string
@@ -60,15 +51,12 @@ def sign_and_base64_encode(string_content, private_key_str):
 
     return base64_signature
 
-
 def generate_request_id(merchant_id):
     return f'{merchant_id}{int(round(datetime.now().timestamp()))}'
 
-
-def send_paylabs_request(method, merchant_id, request_id, endpoint_url, request_body):
+def send_paylabs_request(method, merchant_id, request_id, endpoint_url, request_body, private_key_str):
     json_body = minify_json(json.dumps(remove_nulls(request_body)))
     root_url = settings.PAYLABS_ROOT_URL
-    private_key_str = settings.PAYLABS_PRIVATE_KEYS
     # print(f'before hash: {json_body}')
     digest = sha256(json_body.encode('utf-8')).hexdigest()
     your_timezone = pytz.timezone('Asia/Bangkok')
@@ -91,20 +79,6 @@ def send_paylabs_request(method, merchant_id, request_id, endpoint_url, request_
     response = requests.post(post_url, data=data, headers=header)
     return response
 
-
-# todo: copy dan refaktor fungsi untuk validasi signature dari google collab, setiap request dari paylab harus di verify terlebih dahulu
-
-# Fungsi untuk membuat tanda tangan digital
-def sign_and_base64_encode(data, private_key_str):
-    private_key = serialization.load_pem_private_key(private_key_str.encode('utf-8'), password=None, backend=default_backend())
-    data_bytes = data.encode('utf-8')
-    
-    signature = private_key.sign(data_bytes, padding.PKCS1v15(), hashes.SHA256())
-    base64_signature = base64.b64encode(signature).decode('utf-8')
-    
-    return base64_signature
-
-# Fungsi untuk melakukan verifikasi tanda tangan digital
 def verify_signature(data, signature, public_key_str):
     public_key = serialization.load_pem_public_key(public_key_str.encode('utf-8'), backend=default_backend())
     data_bytes = data.encode('utf-8')
@@ -117,8 +91,35 @@ def verify_signature(data, signature, public_key_str):
         return False  # Tanda tangan tidak valid
 
 # Contoh penggunaan
-private_key_str = """..."""  # Isi dengan kunci pribadi
-public_key_str = """..."""   # Isi dengan kunci publik
+private_key_str = """-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQBd0NIhZQcbSx/QNX+q4stVXDtJ3Q0HLcxMZDhCrfOqLLGNk8nK
+MQCEJrz3+nR+6nFBYq2xSjCu6VXezISB2oUJcI9WtxBl0hnN+z0NaK7FdcE7Y1vO
+3dnSpFlvabQMDB/sQdQIY22/Q+b1sTIuRdHV+4zz5RJFGhkeOEGv4FBtFqr/vxDU
+/lAE1ZTsIN/qJ+zGRQWleAmYbF5jSH06LVhEecpyWexqibU7zp9s//n3qb7q7GAP
+Vebu++j20cq2r8cqbZMWOCnCPKqqZhVWd2MZ8uiLJgVe4AVIWEvwyOlt2GAxyNjG
+AIrqwL4Ki36gCDn0jTTtMbv9QuWi2gIEQm/jAgMBAAECggEAEiK1DEmYZxlNrBU7
+edBf2D99Ipk91H5w+O+CxLkV2nbLWAASyShR3joS26kp7gLqI+ashxI9eQKYW/qT
+Pvr8Lsf4nZ3D6LsFzADeW4I6Duflk9JwQ/w1CHhG5be8W3vYi/Zpw7lc1NWOhz5a
+4gETQFdhdyB4OK2D34imghZN1diI6BTEQ2ctZS2g+ImQspnCdyIbERhn+utM7jcE
+QEr0ri/oDB3ksvEBzmXcuUZl6bT+xcsM/RNnrkB0Y09RogOvAgNB9CM8DqdWTibR
+AR7vmhomCmqw1qO7FPr8A1L8ynroThBOE/pB4Twbc7fXN+p5bo/3qFrVjAuAbICv
+Z+rcwQKBgQClfZT9ir9iTjCdxog8h7b1UbnJ2B/GFv5AYKHibmGo467eVp5ihs8H
+//zgWzOUcfX6BEAqPXXgB1Fi2Rz+8NvbqK6vFeKXVh2+VRhUSNNwo+iocstrvMsE
+9QH7XI2sDWz/eY3Ao+L5Gq7LqqrdG3SalU6uCVcrrl63xW0f4/xZ4QKBgQCRIAGd
+R2NDtNhzCAsGMUTVaLDvehp4QkxlJempYQ8iy+Wmso6u6WnLQLdQO4C34hHC8f34
+q+YIh0bkNCRHMG65TI5VmJGKtKKSQvlELS83z2Ed1Ur+zUr6sZSScmzn30iqt7Fx
+UgThNy+JLnIZ2rRKOEcHj3r8zQqaYBm78XgqQwKBgQCV/mT0CLW+XDAkULVaZ4ek
+ghZqo8Dowh5gKzWPDYzmjrcIPmn/00ACeDqy/vaZLVFM8l1V667TBs71UOO/Dn+3
+cAQkHSnrENqUkHwkqH08MtPFGYbWd59rNsY9FX4y21hXlcytNd2a+lxDrMSA80mU
+co+FnmGr7bdbyU1HAlTPAQKBgCgoeinicjZvGaIjLKHHCmwfby6lVCPI/MjUh+cF
+46FWWLMbH96I2myS+ObrwD+iABY4znV8Y8giXtyRDSTh4xHFfHF1KXj/aSkd/Un/
+UtyXtyEBP6JofoIGl706iqZTJBGRiTl5X75Ofgnw30QGP/N1xTnzWy4PMwrq4tQe
+ColvAoGBAKJQ9knvGAyH1lKiN6a3hpDzHrEOQkUgvzjY48+jvuj1qHgA+NQ/O2Tq
+EZtf9mbR1WwRH3x/bDDj0BfVdo5/cNtzIeJa9A1Brf1iK1JkqQJtG3zj12GSSYi6
+kBRlIFGHq2Guvmk4nHvzCDv24ZBQ+FYVWKu6vJfJsTsgdKu4N6l8
+-----END RSA PRIVATE KEY-----"""
+
+public_key_str = """MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtPnHk4MDjue85H61vST1BUW9nEEnei6+e0P7ZcI6gSD0eXR+iKI2TKhoTLZMBzd+khsRIued39VpXPZRQQA1C2QATy6gMKXt7oeHMwQKy21/KBmem84Y9vggnzarKM1tnUsCatiyuQeo2PDA23ScWcbf5fweJEMAxuLcdGr2AwWRGt9yo056SBTHuUhgj4iJEvC34+6O8ZS1vkGkVSMWYiYnSOGxYMFA9P+STQk76H1cOEJwz5V8GLfooGqKQHUwg67QlA+ltuaJtlYgmcavN1cyGS6ISKvQni8GtbCjHlwv82Rs6FzSC9WwEuDj4lDsTPFIqm3IuWhTbgwt/7iBVQIDAQAB"""   # Isi dengan kunci publik
 
 # Buat data contoh
 data_to_sign = "POST:/payment/v2/va/create:d4730fc9cf4907e36db6dd9baf3e75d3560bf790409f9999e83407f2da474ce0:2023-09-22T15:07:32.745185"
@@ -133,8 +134,6 @@ if is_valid:
     print("Tanda tangan valid.")
 else:
     print("Tanda tangan tidak valid.")
-
-
 
 
 

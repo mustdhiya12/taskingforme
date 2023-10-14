@@ -1,5 +1,6 @@
 import decimal
-
+from django.shortcuts import get_object_or_404
+from .models import Payable, Receivable
 from django.utils import timezone
 from fcm_django.models import FCMDevice
 from firebase_admin.messaging import Message, AndroidNotification, AndroidConfig
@@ -29,8 +30,7 @@ def notify_customer(customer, message, title, body, sound, icon):
             msg = Message(data=order_data, token=device.device_id,
                           android=AndroidConfig(collapse_key='new_order',
                                                 priority='high', ttl=900,
-                                                notification=AndroidNotification(title=title, body=body,
-                                                                                 sound=sound, icon=icon)
+                                                notification=AndroidNotification(title=title, body=body, sound=sound, icon=icon)
                                                 )
                           )
             device.send_message(message=msg)
@@ -40,7 +40,7 @@ def notify_customer(customer, message, title, body, sound, icon):
 
 # todo : for accounting
 def create_payables(instance):
-    # Mengambil data instansiasi 
+    # Mengambil data instansiasi
     payee = instance.customer
     amount = instance.total_amount
     due_date = instance.due_date
@@ -56,7 +56,6 @@ def create_receivables(instance):
 
     receivable = Receivable(payer=payer, amount=amount, due_date=due_date)
     receivable.save()
-
 
 # class InvoiceViewsets(ModelViewSet):
 #     queryset = Invoice.objects.order_by('pk')
