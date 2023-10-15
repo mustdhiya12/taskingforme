@@ -30,6 +30,7 @@ def minify_json(json_string):
         # Handle invalid JSON input
         return None
 
+# Fungsi untuk membuat tanda tangan digital
 def sign_and_base64_encode(string_content, private_key_str):
     # Load the private key from a string
     private_key = serialization.load_pem_private_key(
@@ -174,16 +175,87 @@ def create_paylabs_emoney_request_body(invoice: OJInvoice):
     }
 
 # todo: buat untuk create body untuk virtual account, credit card, OTC, yang status inquiry semua, Order reconciliation file download link interface, sumber: https://paylabs.co.id/api-reference.html
+def create_request_body(request_id, merchant_id, payment_type, amount, merchant_trade_no, payer, product_name, product_info=None, notify_url=None):
+    # Membuat body permintaan umum
+    request_body = {
+        "requestId": request_id,
+        "merchantId": merchant_id,
+        "paymentType": payment_type,
+        "amount": amount,
+        "merchantTradeNo": merchant_trade_no,
+        "payer": payer,
+        "productName": product_name
+    }
 
-# Fungsi untuk membuat tanda tangan digital
-def sign_and_base64_encode(data, private_key_str):
-    private_key = serialization.load_pem_private_key(private_key_str.encode('utf-8'), password=None, backend=default_backend())
-    data_bytes = data.encode('utf-8')
-    
-    signature = private_key.sign(data_bytes, padding.PKCS1v15(), hashes.SHA256())
-    base64_signature = signature
+    if product_info:
+        # Tambahkan informasi produk jika ada
+        request_body["productInfo"] = product_info
 
-    return base64_signature
+    if notify_url:
+        # Tambahkan URL notifikasi jika ada
+        request_body["notifyUrl"] = notify_url
+
+    return request_body
+
+# Contoh user pengguna:
+request_id = "200100011649755895582"
+merchant_id = "0010001"
+payment_type = "BTNVA"
+amount = 10000.00
+merchant_trade_no = "100100011649755895582"
+payer = "test"
+product_name = "Test"
+product_info = [
+    {
+        "id": "123",
+        "name": "Product 1",
+        "price": 5000.00,
+        "type": "Type A",
+        "quantity": 2
+    },
+    {
+        "id": "456",
+        "name": "Product 2",
+        "price": 3000.00,
+        "type": "Type B",
+        "quantity": 1
+    }
+]
+notify_url = "https://example.com/notify"
+
+# Membuat permintaan untuk Virtual Account
+va_request_body = create_request_body(request_id, merchant_id, payment_type, amount, merchant_trade_no, payer, product_name, product_info, notify_url)
+
+# Membuat permintaan untuk Credit Card
+cc_request_body = create_request_body(request_id, merchant_id, "CreditCard", amount, merchant_trade_no, payer, product_name, product_info, notify_url)
+
+# Membuat permintaan untuk OTC
+otc_request_body = create_request_body(request_id, merchant_id, "Convenience Store", amount, merchant_trade_no, payer, product_name, product_info, notify_url)
+
+# Membuat permintaan untuk Status Inquiry VA
+va_status_inquiry_request_body = create_request_body(request_id, merchant_id, "VA", amount, merchant_trade_no, payer, product_name, product_info, notify_url)
+
+# Membuat permintaan untuk Status Inquiry Credit Card
+cc_status_inquiry_request_body = create_request_body(request_id, merchant_id, "CreditCard", amount, merchant_trade_no, payer, product_name, product_info, notify_url)
+
+# Membuat permintaan untuk Status Inquiry OTC
+otc_status_inquiry_request_body = create_request_body(request_id, merchant_id, "Convenience Store", amount, merchant_trade_no, payer, product_name, product_info, notify_url)
+
+
+class VAStatusInquirySerializer(serializers.Serializer):
+    requestId = serializers.CharField(max_length=64)
+    merchantId = serializers.CharField(max_length=10)
+    merchantTradeNo = serializers.CharField(max_length=32)
+    paymentType = serializers.CharField(max_length=20)
+
+# Example Request (Django View)
+va_status_inquiry_data = {
+    "requestId": "200100011649755895582",
+    "merchantId": "0010001",
+    "merchantTradeNo": "100100011649755895582",
+    "paymentType": "VA"
+}
+
 
 # Fungsi untuk membuat permintaan unduh file rekonsiliasi
 def download_reconciliation_file(merchant_id, request_id, transaction_type, pay_date, private_key_str):
